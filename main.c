@@ -191,8 +191,8 @@ int main(int argc, const char* argv[]) {
              */
             double dEdt = -E[s] * P->gamma_B / 2.0 * (1.0 - tanh((T[s] - P->T_C) / P->T_w));
             double dTdt = d2Tds2[s] - dEdt;
-            E_[s] = E[s] + dEdt;
-            T_[s] = T[s] + dTdt;
+            E_[s] = E[s] + dEdt * dt;
+            T_[s] = T[s] + dTdt * dt;
         }
 
         /* Log stuff */
