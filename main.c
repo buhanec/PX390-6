@@ -155,13 +155,12 @@ int main(int argc, const char* argv[]) {
             print_mat(E, P);
         }
 
-        // TODO: THE FUCK IS THIS SHIT
+        // TODO: boundary & corners?
         for (int i = 1; i < P->I - 1; ++i) {
             for (int j = 1; j < P->J - 1; ++j) {
-                // TODO: OMG HOW DO I DO THIS
-                // TODO: just using a simple laplacian, fix this
+                // TODO: Laplacian aok?
                 d2Tds2[CD(i, j)] = (T[CD(i + 1, j)] + T[CD(i - 1, j)] - 2 * T[CD(i, j)]) / pow(dx, 2) +
-                                (T[CD(i, j + 1)] + T[CD(i, j - 1)] - 2 * T[CD(i, j)]) / pow(dy, 2);
+                                   (T[CD(i, j + 1)] + T[CD(i, j - 1)] - 2 * T[CD(i, j)]) / pow(dy, 2);
             }
             d2Tds2[CD(i, 0)] = d2Tds2[CD(i, 1)];
             d2Tds2[CD(i, P->J - 1)] = d2Tds2[CD(i, P->J - 2)];
@@ -170,29 +169,23 @@ int main(int argc, const char* argv[]) {
             d2Tds2[CD(0, j)] = d2Tds2[CD(1, j)];
             d2Tds2[CD(P->I - 1, j)] = d2Tds2[CD(P->I - 1, j)];
         }
-        // TODO: NOW TO FIX THE CORNERS
-        // ... in the worst possible way
-        // please change this to something more sensible
-        d2Tds2[CD(0, 0)] = (d2Tds2[CD(0, 1)] + d2Tds2[CD(1, 0)]) / 4;
-        d2Tds2[CD(P->I - 1, 0)] = (d2Tds2[CD(P->I - 1, 1)] + d2Tds2[CD(P->I - 2, 0)]) / 4;
-        d2Tds2[CD(P->I - 1, P->J - 1)] = (d2Tds2[CD(P->I - 2, P->J - 1)] + d2Tds2[CD(P->I - 1, P->J - 2)]) / 4;
-        d2Tds2[CD(0, P->J - 1)] = (d2Tds2[CD(1, P->J - 1)] + d2Tds2[CD(0, P->J - 2)]) / 4;
 
         if (DEBUG) {
             printf(ANSI_MAGENTA " d2Tds2:" ANSI_RESET "\n");
             print_mat(d2Tds2, P);
         }
 
+        /* Main updates */
+        // TODO: use LAPACK
         for (int s = 0; s < P->S; ++s) {
-            /* Update E based on t - 1 until Sop fixes her maths
-             * ITS A DELTA DOES IT EVEN MATTER IF ITS t - 1
-             * probably, sorry for shouting through code I'm just really bored
-             * ❤
-             */
             double dEdt = -E[s] * P->gamma_B / 2.0 * (1.0 - tanh((T[s] - P->T_C) / P->T_w));
             double dTdt = d2Tds2[s] - dEdt;
-            E_[s] = E[s] + dEdt * dt;
-            T_[s] = T[s] + dTdt * dt;
+            double E_prev = E[s],
+                   dE = dEdt * dt,
+                   T_prev = T[s],
+                   dT = dTdt * dt;
+            E_[s] = E_prev + dE;
+            T_[s] = T_prev + dT;
         }
 
         /* Log stuff */
