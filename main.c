@@ -139,9 +139,9 @@ int main(int argc, const char* argv[]) {
     FILE *error = fopen("errorest.txt", "w");
 
     /* deltas */
-    double dx = P->x_R / P->I;
-    double dy = P->y_H / P->J;
-    double dt = P->t_f / P->K;
+    double dx = P->x_R / (P->I - 1);
+    double dy = P->y_H / (P->J - 1);
+    double dt = P->t_f / (P->K - 1);
 
     for (int k = 0; k < P->K; ++k) {
         double t = dt * k;
