@@ -38,7 +38,7 @@
 #define TIME_GRANULARITY 5
 #define DEBUG 1
 
-#define CD(i, j) i + P->I * j
+#define CD(i, j) (i + P->I * (j))
 
 #undef I
 
