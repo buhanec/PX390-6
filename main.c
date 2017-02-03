@@ -1,12 +1,3 @@
-/*
- * Sophie Tan
- * 1402133
- * G100 Mathematics
- *
- * Changed usage of longs to int, as LAPACK operates on ints and could potentially cause overflowing.
- * When outputting extremely small values, they are rounded to 0.
- */
-
 #include <stdlib.h>
 #include <stdio.h>
 #include <lapacke.h>
