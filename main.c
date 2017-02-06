@@ -136,7 +136,7 @@ int main(int argc, const char* argv[]) {
         double t = dt * k;
 
 #ifdef DEBUG
-        printf(ANSI_YELLOW "Time: %.2g (%d/%d)\n" ANSI_RESET, t, k, P->K);
+        printf(ANSI_YELLOW "Time: %.2g (%d/%d)\n" ANSI_RESET, t, k + 1, P->K);
         printf(ANSI_GREEN " T:" ANSI_RESET "\n");
         print_mat(T, P);
 
