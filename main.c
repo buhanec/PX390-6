@@ -116,9 +116,7 @@ int main(int argc, const char* argv[]) {
         return 1;
     }
     double *T = malloc(P->S * sizeof(double)),
-           *T_ = malloc(P->S * sizeof(double)),
            *E = malloc(P->S * sizeof(double)),
-           *E_ = malloc(P->S * sizeof(double)),
            *d2Tds2 = malloc(P->S * sizeof(double));
     for (int n = 0; n < P->S; ++n) {
         fscanf(coefficients, "%lg %lg", &T[n], &E[n]);
@@ -168,14 +166,12 @@ int main(int argc, const char* argv[]) {
         /* Main updates */
         // TODO: use LAPACK
         for (int s = 0; s < P->S; ++s) {
-            double dEdt = -E[s] * P->gamma_B / 2.0 * (1.0 + tanh((T[s] - P->T_C) / P->T_w));
-            double dTdt = d2Tds2[s] - dEdt;
-            double E_prev = E[s],
+            double dEdt = -E[s] * P->gamma_B / 2.0 * (1.0 + tanh((T[s] - P->T_C) / P->T_w)),
+                   dTdt = d2Tds2[s] - dEdt,
                    dE = dEdt * dt,
-                   T_prev = T[s],
                    dT = dTdt * dt;
-            E_[s] = E_prev + dE;
-            T_[s] = T_prev + dT;
+            E[s] += dE;
+            T[s] += dT;
         }
 
         /* Log stuff */
@@ -186,28 +182,13 @@ int main(int argc, const char* argv[]) {
                 }
             }
         }
-
-        swap_mem(&T, &T_);
-        swap_mem(&E, &E_);
     }
-
-    /* Let there be colour */
-    band_mat bmat;
-    init_band_mat(&bmat, 2, 2, 10);
-
-#ifdef DEBUG
-    printf(ANSI_GREEN " BMAT:" ANSI_RESET "\n");
-    print_bmat(&bmat);
-#endif
 
     /* Cleanup */
     fclose(output);
     fclose(error);
-    finalise_band_mat(&bmat);
     free(T);
     free(E);
-    free(T_);
-    free(E_);
     free(d2Tds2);
 
     return 0;
