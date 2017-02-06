@@ -137,19 +137,18 @@ int main(int argc, const char* argv[]) {
     for (int k = 0; k < P->K; ++k) {
         double t = dt * k;
 
-        if (DEBUG) {
-            printf(ANSI_YELLOW "Time: %.2g (%d/%d)\n" ANSI_RESET, t, k, P->K);
-            printf(ANSI_GREEN " T:" ANSI_RESET "\n");
-            print_mat(T, P);
+#ifdef DEBUG
+        printf(ANSI_YELLOW "Time: %.2g (%d/%d)\n" ANSI_RESET, t, k, P->K);
+        printf(ANSI_GREEN " T:" ANSI_RESET "\n");
+        print_mat(T, P);
 
-            printf(ANSI_GREEN " E:" ANSI_RESET "\n");
-            print_mat(E, P);
-        }
+        printf(ANSI_GREEN " E:" ANSI_RESET "\n");
+        print_mat(E, P);
+#endif
 
         // TODO: boundary & corners?
         for (int i = 1; i < P->I - 1; ++i) {
             for (int j = 1; j < P->J - 1; ++j) {
-                // TODO: Laplacian aok?
                 d2Tds2[CD(i, j)] = (T[CD(i + 1, j)] + T[CD(i - 1, j)] - 2 * T[CD(i, j)]) / pow(dx, 2) +
                                    (T[CD(i, j + 1)] + T[CD(i, j - 1)] - 2 * T[CD(i, j)]) / pow(dy, 2);
             }
@@ -161,10 +160,10 @@ int main(int argc, const char* argv[]) {
             d2Tds2[CD(P->I - 1, j)] = d2Tds2[CD(P->I - 1, j)];
         }
 
-        if (DEBUG) {
-            printf(ANSI_MAGENTA " d2Tds2:" ANSI_RESET "\n");
-            print_mat(d2Tds2, P);
-        }
+#ifdef DEBUG
+        printf(ANSI_MAGENTA " d2Tds2:" ANSI_RESET "\n");
+        print_mat(d2Tds2, P);
+#endif
 
         /* Main updates */
         // TODO: use LAPACK
@@ -195,10 +194,11 @@ int main(int argc, const char* argv[]) {
     /* Let there be colour */
     band_mat bmat;
     init_band_mat(&bmat, 2, 2, 10);
-    if (DEBUG) {
-        printf(ANSI_GREEN " BMAT:" ANSI_RESET "\n");
-        print_bmat(&bmat);
-    }
+
+#ifdef DEBUG
+    printf(ANSI_GREEN " BMAT:" ANSI_RESET "\n");
+    print_bmat(&bmat);
+#endif
 
     /* Cleanup */
     fclose(output);
