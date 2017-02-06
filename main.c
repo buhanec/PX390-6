@@ -130,19 +130,31 @@ int main(int argc, const char* argv[]) {
     /* deltas */
     double dx = P->x_R / (P->I - 1);
     double dy = P->y_H / (P->J - 1);
-    double dt = P->t_f / (P->K - 1);
+    double dt = P->t_f / P->K;
 
-    for (int k = 0; k < P->K; ++k) {
+    for (int k = 0; k < P->K + 1; ++k) {
         double t = dt * k;
 
 #ifdef DEBUG
-        printf(ANSI_YELLOW "Time: %.2g (%d/%d)\n" ANSI_RESET, t, k + 1, P->K);
+        printf(ANSI_YELLOW "Time: %.2g (%d/%d)\n" ANSI_RESET, t, k, P->K);
+        if (!(k % TIME_GRANULARITY)) {
+            printf(ANSI_L_CYAN " Logging output\n" ANSI_RESET);
+        }
         printf(ANSI_GREEN " T:" ANSI_RESET "\n");
         print_mat(T, P);
 
         printf(ANSI_GREEN " E:" ANSI_RESET "\n");
         print_mat(E, P);
 #endif
+
+        /* Log stuff */
+        if (!(k % TIME_GRANULARITY)) {
+            for (int i = 0; i < P->I; ++i) {
+                for (int j = 0; j < P->J; ++j) {
+                    fprintf(output, "%lg %lg %lg %lg %lg\n", t, dx * i, dy * j, T[CD(i, j)], E[CD(i, j)]);
+                }
+            }
+        }
 
         // TODO: boundary & corners?
         for (int i = 1; i < P->I - 1; ++i) {
