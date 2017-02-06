@@ -26,7 +26,7 @@
 
 #define FLOAT_CMP_RTOL 1e-05
 #define FLOAT_CMP_ATOL 1e-08
-#define TIME_GRANULARITY 5
+#define TIME_GRANULARITY 1000
 #define DEBUG 1
 
 #define CD(i, j) (i + P->I * (j))
@@ -168,7 +168,7 @@ int main(int argc, const char* argv[]) {
         /* Main updates */
         // TODO: use LAPACK
         for (int s = 0; s < P->S; ++s) {
-            double dEdt = -E[s] * P->gamma_B / 2.0 * (1.0 - tanh((T[s] - P->T_C) / P->T_w));
+            double dEdt = -E[s] * P->gamma_B / 2.0 * (1.0 + tanh((T[s] - P->T_C) / P->T_w));
             double dTdt = d2Tds2[s] - dEdt;
             double E_prev = E[s],
                    dE = dEdt * dt,
