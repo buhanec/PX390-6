@@ -147,7 +147,6 @@ int main(int argc, const char* argv[]) {
         T_(-1, j) = T_(1, j);
         T_(P->I, j) = T_(P->I - 2, j);
     }
-
 #else
     double *T = malloc(P->S * sizeof(double)),
             *E = malloc(P->S * sizeof(double)),
