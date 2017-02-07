@@ -149,8 +149,8 @@ int main(int argc, const char* argv[]) {
     }
 #else
     double *T = malloc(P->S * sizeof(double)),
-            *E = malloc(P->S * sizeof(double)),
-            *d2Tds2 = malloc(P->S * sizeof(double));
+           *E = malloc(P->S * sizeof(double)),
+           *d2Tds2 = malloc(P->S * sizeof(double));
     for (int s = 0; s < P->S; ++s) {
         fscanf(coefficients, "%lg %lg", &T[s], &E[s]);
     }
@@ -215,9 +215,9 @@ int main(int argc, const char* argv[]) {
         for (int i = 0; i < P->I; ++i) {
             for (int j = 0; j < P->J; ++j) {
                 int j_l = j - 1 + 2 * !j,
-                        j_h = j + 1 - 2 * (j == P->J - 1),
-                        i_l = i - 1 + 2 * !i,
-                        i_r = i + 1 - 2 * (i == P->I - 1);
+                    j_h = j + 1 - 2 * (j == P->J - 1),
+                    i_l = i - 1 + 2 * !i,
+                    i_r = i + 1 - 2 * (i == P->I - 1);
                 d2Tds2_(i, j) = (T_(i_r, j) + T_(i_l, j) - 2 * T_(i, j)) / pow(dx, 2) +
                                 (T_(i, j_h) + T_(i, j_l) - 2 * T_(i, j)) / pow(dy, 2);
             }
@@ -247,10 +247,6 @@ int main(int argc, const char* argv[]) {
                 //E_(i, j) /= dE_Mo;
                 T_(i, j) += dT;
             }
-        }
-        for (int s = 0; s < P->S; ++s) {
-
-
         }
 #else
         for (int s = 0; s < P->S; ++s) {
