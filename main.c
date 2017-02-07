@@ -105,6 +105,7 @@ int main(int argc, const char* argv[]) {
     /* Set remaining parameters */
     // TODO: stability
     // TODO: floor vs round
+    // TODO: remainder is_close
     P->K = (int) floor(P->t_f / P->t_d) * TIME_GRANULARITY;
     P->S = P->I * P->J;
 
@@ -157,17 +158,15 @@ int main(int argc, const char* argv[]) {
         }
 
         // TODO: boundary & corners?
-        for (int i = 1; i < P->I - 1; ++i) {
-            for (int j = 1; j < P->J - 1; ++j) {
-                d2Tds2[CD(i, j)] = (T[CD(i + 1, j)] + T[CD(i - 1, j)] - 2 * T[CD(i, j)]) / pow(dx, 2) +
-                                   (T[CD(i, j + 1)] + T[CD(i, j - 1)] - 2 * T[CD(i, j)]) / pow(dy, 2);
+        for (int i = 0; i < P->I; ++i) {
+            for (int j = 0; j < P->J; ++j) {
+                int j_l = j - 1 + 2 * !j,
+                    j_h = j + 1 - 2 * (j == P->J - 1),
+                    i_l = i - 1 + 2 * !i,
+                    i_r = i + 1 - 2 * (i == P->I - 1);
+                d2Tds2[CD(i, j)] = (T[CD(i_r, j)] + T[CD(i_l, j)] - 2 * T[CD(i, j)]) / pow(dx, 2) +
+                                   (T[CD(i, j_h)] + T[CD(i, j_l)] - 2 * T[CD(i, j)]) / pow(dy, 2);
             }
-            d2Tds2[CD(i, 0)] = d2Tds2[CD(i, 1)];
-            d2Tds2[CD(i, P->J - 1)] = d2Tds2[CD(i, P->J - 2)];
-        }
-        for (int j = 0; j < P->J; ++j) {
-            d2Tds2[CD(0, j)] = d2Tds2[CD(1, j)];
-            d2Tds2[CD(P->I - 1, j)] = d2Tds2[CD(P->I - 1, j)];
         }
 
 #ifdef DEBUG
@@ -187,12 +186,16 @@ int main(int argc, const char* argv[]) {
         }
 
         /* Log stuff */
-        if (!(k % TIME_GRANULARITY)) {
-            for (int i = 0; i < P->I; ++i) {
-                for (int j = 0; j < P->J; ++j) {
-                    fprintf(output, "%lg %lg %lg %lg %lg\n", t, dx * i, dy * j, T[CD(i, j)], E[CD(i, j)]);
-                }
-            }
+        for (int s = 0; s < P->S; ++s) {
+            double tanch = 1.0 + tanh((T[s] - P->T_C) / P->T_w),
+                   dEdt = -E[s] * (P->gamma_B / 2.0) * tanch,
+                   dTdt = d2Tds2[s] - dEdt,
+                   dE = -E[s] * (P->gamma_B / 2.0) * tanch * dt,
+                   //dE_Mo = 1.0 + (P->gamma_B / 2.0) * tanch * dt,
+                   dT = dTdt * dt;
+            E[s] += dE;
+            //E[s] /= dE_Mo;
+            T[s] += dT;
         }
     }
 
