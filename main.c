@@ -26,7 +26,6 @@
 
 #define FLOAT_CMP_RTOL 1e-05
 #define FLOAT_CMP_ATOL 1e-08
-#define TIME_GRANULARITY 1000
 #define DEBUG
 #define GHOST
 
@@ -39,6 +38,8 @@
 #endif
 #define E_(i, j) E[CD(i, j)]
 #define d2Tds2_(i, j) d2Tds2[CD(i, j)]
+
+#define min(a, b) (((a) < (b)) ? (a) : (b))
 
 #undef I
 
@@ -117,10 +118,29 @@ int main(int argc, const char* argv[]) {
 
     /* Set remaining parameters */
     // TODO: stability
-    // TODO: floor vs round
-    // TODO: remainder is_close
-    P->K = (int) floor(P->t_f / P->t_d) * TIME_GRANULARITY;
+    // TODO: floor vs round + remainder is_close
     P->S = P->I * P->J;
+    /* deltas */
+    double dx = P->x_R / (P->I - 1);
+    double dy = P->y_H / (P->J - 1);
+    double magical_factor = 2.0;
+    if (is_close(round(P->t_f / P->t_d), P->t_f / P->t_d)) {
+        P->K = (int) round(P->t_f / P->t_d);
+#ifdef DEBUG
+        printf(ANSI_YELLOW "Rounding to %d steps (%g/%g)\n" ANSI_RESET, P->K, P->t_f, P->t_d);
+#endif
+    } else {
+        P->K = (int) floor(P->t_f / P->t_d);
+#ifdef DEBUG
+        printf(ANSI_YELLOW "Flooring to %d steps (%g/%g)\n" ANSI_RESET, P->K, P->t_f, P->t_d);
+#endif
+    }
+    int TIME_GRANULARITY = (int) ceil(magical_factor * 2 * P->t_f / (P->K * min(pow(dx, 2), pow(dy, 2))));
+    P->K *= TIME_GRANULARITY;
+    double dt = P->t_f / P->K;
+#ifdef DEBUG
+    printf(ANSI_YELLOW "TIME_GRANULARITY %d resulting in dt of %g vs %g\n" ANSI_RESET, TIME_GRANULARITY, dt, P->t_d);
+#endif
 
     /* Reading coefficients for T(x, y, 0) and E(x, y, 0) */
     // TODO: any reason not to update E in-place
@@ -160,11 +180,6 @@ int main(int argc, const char* argv[]) {
     /* Output file for data */
     FILE *output = fopen("output.txt", "w");
     FILE *error = fopen("errorest.txt", "w");
-
-    /* deltas */
-    double dx = P->x_R / (P->I - 1);
-    double dy = P->y_H / (P->J - 1);
-    double dt = P->t_f / P->K;
 
     for (int k = 0; k < P->K + 1; ++k) {
         double t = dt * k;
