@@ -27,9 +27,12 @@
 #define FLOAT_CMP_RTOL 1e-05
 #define FLOAT_CMP_ATOL 1e-08
 #define TIME_GRANULARITY 1000
-#define DEBUG 1
+#define DEBUG
 
-#define CD(i, j) (i + P->I * (j))
+#define CD(i, j) ((i) + P->I * (j))
+#define T_(i, j) T[CD(i, j)]
+#define E_(i, j) E[CD(i, j)]
+#define d2Tds2_(i, j) d2Tds2[CD(i, j)]
 
 #undef I
 
@@ -119,8 +122,8 @@ int main(int argc, const char* argv[]) {
     double *T = malloc(P->S * sizeof(double)),
            *E = malloc(P->S * sizeof(double)),
            *d2Tds2 = malloc(P->S * sizeof(double));
-    for (int n = 0; n < P->S; ++n) {
-        fscanf(coefficients, "%lg %lg", &T[n], &E[n]);
+    for (int s = 0; s < P->S; ++s) {
+        fscanf(coefficients, "%lg %lg", &T[s], &E[s]);
     }
     fclose(coefficients);
 
@@ -164,8 +167,8 @@ int main(int argc, const char* argv[]) {
                     j_h = j + 1 - 2 * (j == P->J - 1),
                     i_l = i - 1 + 2 * !i,
                     i_r = i + 1 - 2 * (i == P->I - 1);
-                d2Tds2[CD(i, j)] = (T[CD(i_r, j)] + T[CD(i_l, j)] - 2 * T[CD(i, j)]) / pow(dx, 2) +
-                                   (T[CD(i, j_h)] + T[CD(i, j_l)] - 2 * T[CD(i, j)]) / pow(dy, 2);
+                d2Tds2_(i, j) = (T_(i_r, j) + T_(i_l, j) - 2 * T_(i, j)) / pow(dx, 2) +
+                                (T_(i, j_h) + T_(i, j_l) - 2 * T_(i, j)) / pow(dy, 2);
             }
         }
 
@@ -174,18 +177,7 @@ int main(int argc, const char* argv[]) {
         print_mat(d2Tds2, P);
 #endif
 
-        /* Main updates */
-        // TODO: use LAPACK
-        for (int s = 0; s < P->S; ++s) {
-            double dEdt = -E[s] * P->gamma_B / 2.0 * (1.0 + tanh((T[s] - P->T_C) / P->T_w)),
-                   dTdt = d2Tds2[s] - dEdt,
-                   dE = dEdt * dt,
-                   dT = dTdt * dt;
-            E[s] += dE;
-            T[s] += dT;
-        }
-
-        /* Log stuff */
+        /* Update T and E */
         for (int s = 0; s < P->S; ++s) {
             double tanch = 1.0 + tanh((T[s] - P->T_C) / P->T_w),
                    dEdt = -E[s] * (P->gamma_B / 2.0) * tanch,
