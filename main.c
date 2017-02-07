@@ -28,9 +28,15 @@
 #define FLOAT_CMP_ATOL 1e-08
 #define TIME_GRANULARITY 1000
 #define DEBUG
+#define GHOST
 
 #define CD(i, j) ((i) + P->I * (j))
+#ifdef GHOST
+#define CDG(i, j) ((i) + 1 + (P->I + 2) * ((j) + 1))
+#define T_(i, j) T[CDG(i, j)]
+#else
 #define T_(i, j) T[CD(i, j)]
+#endif
 #define E_(i, j) E[CD(i, j)]
 #define d2Tds2_(i, j) d2Tds2[CD(i, j)]
 
@@ -81,6 +87,10 @@ int solve_Ax_eq_b(band_mat *bmat, double *x, double *b);
 /* Print band matrix */
 void print_bmat(band_mat *bmat);
 
+#ifdef GHOST
+void print_gmat(double *mat, params *P);
+#endif
+
 /* Print matrix */
 void print_mat(double* bmat, params* P);
 
@@ -119,12 +129,33 @@ int main(int argc, const char* argv[]) {
         fprintf(stderr, "Can't open coefficients file\n");
         return 1;
     }
-    double *T = malloc(P->S * sizeof(double)),
+#ifdef GHOST
+    double *T = malloc((P->I + 2) * (P->J + 2) * sizeof(double)),
            *E = malloc(P->S * sizeof(double)),
            *d2Tds2 = malloc(P->S * sizeof(double));
+    for (int s = 0; s < (P->I + 2) * (P->J + 2); ++s) {
+        T[s] = NAN;
+    }
+    for (int i = 0; i < P->I; ++i) {
+        for (int j = 0; j < P->J; ++j) {
+            fscanf(coefficients, "%lg %lg", &T_(i, j), &E_(i, j));
+        }
+        T_(i, -1) = T_(i, 1);
+        T_(i, P->J) = T_(i, P->J - 2);
+    }
+    for (int j = 0; j < P->J; ++j) {
+        T_(-1, j) = T_(1, j);
+        T_(P->I, j) = T_(P->I - 2, j);
+    }
+
+#else
+    double *T = malloc(P->S * sizeof(double)),
+            *E = malloc(P->S * sizeof(double)),
+            *d2Tds2 = malloc(P->S * sizeof(double));
     for (int s = 0; s < P->S; ++s) {
         fscanf(coefficients, "%lg %lg", &T[s], &E[s]);
     }
+#endif
     fclose(coefficients);
 
     /* Output file for data */
@@ -145,8 +176,11 @@ int main(int argc, const char* argv[]) {
             printf(ANSI_L_CYAN " Logging output\n" ANSI_RESET);
         }
         printf(ANSI_GREEN " T:" ANSI_RESET "\n");
+#ifdef GHOST
+        print_gmat(T, P);
+#else
         print_mat(T, P);
-
+#endif
         printf(ANSI_GREEN " E:" ANSI_RESET "\n");
         print_mat(E, P);
 #endif
@@ -161,34 +195,77 @@ int main(int argc, const char* argv[]) {
         }
 
         // TODO: boundary & corners?
+#ifdef GHOST
+        /* Update T ghost points */
+        for (int i = 0; i < P->I; ++i) {
+            T_(i, -1) = T_(i, 1);
+            T_(i, P->J) = T_(i, P->J - 2);
+        }
+        for (int j = 0; j < P->J; ++j) {
+            T_(-1, j) = T_(1, j);
+            T_(P->I, j) = T_(P->I - 2, j);
+        }
+        /* Update d2Tds2 */
+        for (int i = 0; i < P->I; ++i) {
+            for (int j = 0; j < P->J; ++j) {
+                d2Tds2_(i, j) = (T_(i + 1, j) + T_(i - 1, j) - 2 * T_(i, j)) / pow(dx, 2) +
+                                (T_(i, j + 1) + T_(i, j - 1) - 2 * T_(i, j)) / pow(dy, 2);
+            }
+        }
+#else
         for (int i = 0; i < P->I; ++i) {
             for (int j = 0; j < P->J; ++j) {
                 int j_l = j - 1 + 2 * !j,
-                    j_h = j + 1 - 2 * (j == P->J - 1),
-                    i_l = i - 1 + 2 * !i,
-                    i_r = i + 1 - 2 * (i == P->I - 1);
+                        j_h = j + 1 - 2 * (j == P->J - 1),
+                        i_l = i - 1 + 2 * !i,
+                        i_r = i + 1 - 2 * (i == P->I - 1);
                 d2Tds2_(i, j) = (T_(i_r, j) + T_(i_l, j) - 2 * T_(i, j)) / pow(dx, 2) +
                                 (T_(i, j_h) + T_(i, j_l) - 2 * T_(i, j)) / pow(dy, 2);
             }
         }
+#endif
 
 #ifdef DEBUG
+#ifdef GHOST
+        printf(ANSI_MAGENTA " Interim T:" ANSI_RESET "\n");
+        print_gmat(T, P);
+#endif
         printf(ANSI_MAGENTA " d2Tds2:" ANSI_RESET "\n");
         print_mat(d2Tds2, P);
 #endif
 
         /* Update T and E */
+#ifdef GHOST
+        for (int i = 0; i < P->I; ++i) {
+            for (int j = 0; j < P->J; ++j) {
+                double tanch = 1.0 + tanh((T_(i, j) - P->T_C) / P->T_w),
+                       dEdt = -E_(i, j) * (P->gamma_B / 2.0) * tanch,
+                       dTdt = d2Tds2_(i, j) - dEdt,
+                       dE = -E_(i, j) * (P->gamma_B / 2.0) * tanch * dt,
+                       //dE_Mo = 1.0 + (P->gamma_B / 2.0) * tanch * dt,
+                       dT = dTdt * dt;
+                E_(i, j) += dE;
+                //E_(i, j) /= dE_Mo;
+                T_(i, j) += dT;
+            }
+        }
+        for (int s = 0; s < P->S; ++s) {
+
+
+        }
+#else
         for (int s = 0; s < P->S; ++s) {
             double tanch = 1.0 + tanh((T[s] - P->T_C) / P->T_w),
-                   dEdt = -E[s] * (P->gamma_B / 2.0) * tanch,
-                   dTdt = d2Tds2[s] - dEdt,
-                   dE = -E[s] * (P->gamma_B / 2.0) * tanch * dt,
-                   //dE_Mo = 1.0 + (P->gamma_B / 2.0) * tanch * dt,
-                   dT = dTdt * dt;
+                    dEdt = -E[s] * (P->gamma_B / 2.0) * tanch,
+                    dTdt = d2Tds2[s] - dEdt,
+                    dE = -E[s] * (P->gamma_B / 2.0) * tanch * dt,
+            //dE_Mo = 1.0 + (P->gamma_B / 2.0) * tanch * dt,
+                    dT = dTdt * dt;
             E[s] += dE;
             //E[s] /= dE_Mo;
             T[s] += dT;
         }
+#endif
     }
 
     /* Cleanup */
@@ -301,6 +378,44 @@ void print_bmat(band_mat *bmat) {
     }
     printf("─┘\n");
 }
+
+#ifdef GHOST
+/* Print matrix with ghost points */
+void print_gmat(double *mat, params *P) {
+
+    /* Column header */
+    printf("       ");
+    for (int i = -1; i < P->I + 1; ++i) {
+        printf("%11d ", i);
+    }
+    printf("\n");
+    printf("     ┌");
+    for (int i = -1; i < P->I + 1; ++i) {
+        printf("────────────");
+    }
+    printf("─┐\n");
+
+    /* Rows */
+    for (int i = -1; i < P->I + 1; ++i) {
+        printf("%4d │ ", i);
+        for (int j = -1; j < P->J + 1; ++j) {
+            if (i < 0 || j < 0 || i == P->I || j == P->J) {
+                printf(ANSI_RED);
+            }
+            printf("%11.4g ", mat[CDG(i, j)]);
+            if (i < 0 || j < 0 || i == P->I || j == P->J) {
+                printf(ANSI_RESET);
+            }
+        }
+        printf("│\n");
+    }
+    printf("     └");
+    for (int i = -1; i < P->I + 1; ++i) {
+        printf("────────────");
+    }
+    printf("─┘\n");
+}
+#endif
 
 /* Print matrix */
 void print_mat(double* mat, params* P) {
