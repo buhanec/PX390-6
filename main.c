@@ -14,7 +14,7 @@
 
 #define FLOAT_CMP_RTOL 1e-05
 #define FLOAT_CMP_ATOL 1e-08
-#define DEBUG
+#define LOG
 
 #define T_(i, j) T[(i) + P->I * (j)]
 #define E_(i, j) E[(i) + P->I * (j)]
@@ -100,25 +100,25 @@ int main(int argc, const char* argv[]) {
     /* deltas */
     double dx = P->x_R / (P->I - 1);
     double dy = P->y_H / (P->J - 1);
-#ifdef DEBUG
+#ifdef LOG
     printf(ANSI_YELLOW "dx: %g\ndy: %g\n" ANSI_RESET, dx, dy);
 #endif
     double magical_factor = 2.0;
     if (is_close(round(P->t_f / P->t_d), P->t_f / P->t_d)) {
         P->K = (int) round(P->t_f / P->t_d);
-#ifdef DEBUG
+#ifdef LOG
         printf(ANSI_YELLOW "Rounding to %d steps (%g/%g)\n" ANSI_RESET, P->K, P->t_f, P->t_d);
 #endif
     } else {
         P->K = (int) floor(P->t_f / P->t_d);
-#ifdef DEBUG
+#ifdef LOG
         printf(ANSI_YELLOW "Flooring to %d steps (%g/%g)\n" ANSI_RESET, P->K, P->t_f, P->t_d);
 #endif
     }
     int TIME_GRANULARITY = (int) ceil(magical_factor * 2 * P->t_f / (P->K * min(pow(dx, 2), pow(dy, 2))));
     P->K *= TIME_GRANULARITY;
     double dt = P->t_f / P->K;
-#ifdef DEBUG
+#ifdef LOG
     printf(ANSI_YELLOW "TIME_GRANULARITY %d\ndt: %g (t_d: %g)\n" ANSI_RESET, TIME_GRANULARITY, dt, P->t_d);
 #endif
 
@@ -149,7 +149,7 @@ int main(int argc, const char* argv[]) {
         incv(&A, s, s + 1 - 2 * (i == P->I - 1), 1 / (2 * pow(dx, 2)));
     }
 
-#ifdef DEBUG
+#ifdef LOG
     printf(ANSI_GREEN "Coefficient matrix A:" ANSI_RESET "\n");
     print_bmat(&A);
 #endif
@@ -204,6 +204,13 @@ int main(int argc, const char* argv[]) {
         /* Solve T for t+1 */
         solve_Ax_eq_b(&A, T, RHS);
     }
+
+#ifdef LOG
+    printf(ANSI_GREEN "Final T:\n" ANSI_RESET);
+    print_mat(T, P);
+    printf(ANSI_GREEN "Final E:\n" ANSI_RESET);
+    print_mat(E, P);
+#endif
 
     /* Cleanup */
     fclose(output);
