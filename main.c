@@ -2,6 +2,7 @@
 #include <stdio.h>
 #include <lapacke.h>
 #include <math.h>
+#include <z3.h>
 
 #define ANSI_RESET  "\e[0m"
 #define ANSI_BOLD  "\x1B[1m"
@@ -103,7 +104,7 @@ int main(int argc, const char* argv[]) {
 #ifdef LOG
     printf(ANSI_YELLOW "dx: %g\ndy: %g\n" ANSI_RESET, dx, dy);
 #endif
-    double magical_factor = 2.0;
+    double magical_factor = 666.0;
     if (is_close(round(P->t_f / P->t_d), P->t_f / P->t_d)) {
         P->K = (int) round(P->t_f / P->t_d);
 #ifdef LOG
@@ -152,6 +153,10 @@ int main(int argc, const char* argv[]) {
 #ifdef LOG
     printf(ANSI_GREEN "Coefficient matrix A:" ANSI_RESET "\n");
     print_bmat(&A);
+    printf(ANSI_GREEN "Initial T:\n" ANSI_RESET);
+    print_mat(T, P);
+    printf(ANSI_GREEN "Initial E:\n" ANSI_RESET);
+    print_mat(E, P);
 #endif
 
     /* Output file for data */
