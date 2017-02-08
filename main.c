@@ -2,7 +2,6 @@
 #include <stdio.h>
 #include <lapacke.h>
 #include <math.h>
-#include <z3.h>
 
 #define ANSI_RESET  "\e[0m"
 #define ANSI_BOLD  "\x1B[1m"
@@ -64,8 +63,8 @@ double *getp(band_mat *bmat, int row, int column);
 /* Set value to a location in the band matrix, using the row and column indexes of the full matrix. */
 void setv(band_mat *bmat, int row, int column, double val);
 
-/* Increase value at a location in the band matrix, using the row and column indexes of the full matrix. */
-void incv(band_mat *bmat, int row, int column, double val);
+/* Decrease value at a location in the band matrix, using the row and column indexes of the full matrix. */
+void decv(band_mat *bmat, int row, int column, double val);
 
 /* Solve the equation Ax = b for a matrix a stored in band format and x and b real arrays */
 int solve_Ax_eq_b(band_mat *bmat, double *x, double *b);
@@ -144,10 +143,10 @@ int main(int argc, const char* argv[]) {
         int i = s % P->I,
             j = s / P->I;
         setv(&A, s, s, 1 / pow(dx, 2) + 1 / pow(dy, 2) + 1 / dt);
-        incv(&A, s - P->I + 2 * P->I * (j == 0), s, 1 / (2 * pow(dy, 2)));
-        incv(&A, s + P->I - 2 * P->I * (j == P->J - 1), s, 1 / (2 * pow(dy, 2)));
-        incv(&A, s, s - 1 + 2 * (i == 0), 1 / (2 * pow(dx, 2)));
-        incv(&A, s, s + 1 - 2 * (i == P->I - 1), 1 / (2 * pow(dx, 2)));
+        decv(&A, s - P->I + 2 * P->I * (j == 0), s, 1 / (2 * pow(dy, 2)));
+        decv(&A, s + P->I - 2 * P->I * (j == P->J - 1), s, 1 / (2 * pow(dy, 2)));
+        decv(&A, s, s - 1 + 2 * (i == 0), 1 / (2 * pow(dx, 2)));
+        decv(&A, s, s + 1 - 2 * (i == P->I - 1), 1 / (2 * pow(dx, 2)));
     }
 
 #ifdef LOG
@@ -277,8 +276,8 @@ void setv(band_mat *bmat, int row, int column, double val) {
     *valr = val;
 }
 
-/* Increase value at a location in the band matrix, using the row and column indexes of the full matrix. */
-void incv(band_mat *bmat, int row, int column, double val) {
+/* Decrease value at a location in the band matrix, using the row and column indexes of the full matrix. */
+void decv(band_mat *bmat, int row, int column, double val) {
     double *valr = getp(bmat, row, column);
     int bandno = bmat->nbands_up + row - column;
     if (bandno < 0 || bandno >= bmat->nbrows) {
@@ -286,7 +285,7 @@ void incv(band_mat *bmat, int row, int column, double val) {
                row, column, bandno);
         exit(1);
     }
-    *valr += val;
+    *valr -= val;
 }
 
 /* Solve the equation Ax = b for a matrix a stored in band format and x and b real arrays */
