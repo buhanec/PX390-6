@@ -189,10 +189,10 @@ int main(int argc, const char* argv[]) {
                     i_l = i - 1 + 2 * (i == 0),
                     i_r = i + 1 - 2 * (i == P->I - 1);
                 double tanch = 1.0 + tanh((T_(i, j) - P->T_C) / P->T_w),
-                        dEdt = -E_(i, j) * (P->gamma_B / 2.0) * tanch;
+                       dEdt = -E_(i, j) * (P->gamma_B / 2.0) * tanch;
                 E_(i, j) += dEdt * dt;
-                RHS_(i, j) = (T_(i_r, j) + T_(i_l, j) - T_(i, j)) / pow(dx, 2) +
-                             (T_(i, j_h) + T_(i, j_l) - T_(i, j)) / pow(dy, 2) - T_(i, j) / dt - dEdt;
+                RHS_(i, j) = (T_(i_r, j) / 2 + T_(i_l, j) / 2 - T_(i, j)) / pow(dx, 2) +
+                             (T_(i, j_h) / 2 + T_(i, j_l) / 2 - T_(i, j)) / pow(dy, 2) + T_(i, j) / dt - dEdt;
             }
         }
 
