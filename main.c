@@ -4,35 +4,21 @@
 #include <math.h>
 
 #define ANSI_RESET  "\e[0m"
+#define ANSI_BOLD  "\x1B[1m"
 
-#define ANSI_BLACK  "\e[30m"
 #define ANSI_RED  "\e[31m"
 #define ANSI_GREEN  "\e[32m"
 #define ANSI_YELLOW  "\e[33m"
-#define ANSI_BLUE  "\e[34m"
 #define ANSI_MAGENTA  "\e[35m"
-#define ANSI_CYAN  "\e[36m"
-#define ANSI_L_GREY  "\e[37m"
-#define ANSI_D_GREY "\e[90m"
-#define ANSI_L_RED "\e[91m"
-#define ANSI_L_GREEN "\e[92m"
-#define ANSI_L_YELLOW "\e[93m"
-#define ANSI_L_BLUE "\e[94m"
-#define ANSI_L_MAGENTA "\e[95m"
 #define ANSI_L_CYAN  "\e[96m"
-#define ANSI_L_WHITE  "\e[97m"
-
-#define ANSI_BOLD  "\x1B[1m"
 
 #define FLOAT_CMP_RTOL 1e-05
 #define FLOAT_CMP_ATOL 1e-08
 #define DEBUG
 
-#define CD(i, j) ((i) + P->I * (j))
-#define T_(i, j) T[CD((i), (j))]
-#define E_(i, j) E[CD((i), (j))]
-#define A_(i, j) A[CD((i), (j))]
-#define RHS_(i, j) RHS[CD((i), (j))]
+#define T_(i, j) T[(i) + P->I * (j)]
+#define E_(i, j) E[(i) + P->I * (j)]
+#define RHS_(i, j) RHS[(i) + P->I * (j)]
 
 #define min(a, b) (((a) < (b)) ? (a) : (b))
 
@@ -89,9 +75,6 @@ void print_bmat(band_mat *bmat);
 /* Print matrix */
 void print_mat(double* bmat, params* P);
 
-/* Efficient swap memory function */
-void swap_mem(double** a, double** b);
-
 /* Equality check using absolute and relative tolerance for floating-point numbers */
 int is_close(double a, double b);
 
@@ -117,6 +100,9 @@ int main(int argc, const char* argv[]) {
     /* deltas */
     double dx = P->x_R / (P->I - 1);
     double dy = P->y_H / (P->J - 1);
+#ifdef DEBUG
+    printf(ANSI_YELLOW "dx: %g\ndy: %g\n" ANSI_RESET, dx, dy);
+#endif
     double magical_factor = 2.0;
     if (is_close(round(P->t_f / P->t_d), P->t_f / P->t_d)) {
         P->K = (int) round(P->t_f / P->t_d);
@@ -133,11 +119,10 @@ int main(int argc, const char* argv[]) {
     P->K *= TIME_GRANULARITY;
     double dt = P->t_f / P->K;
 #ifdef DEBUG
-    printf(ANSI_YELLOW "TIME_GRANULARITY %d resulting in dt of %g vs %g\n" ANSI_RESET, TIME_GRANULARITY, dt, P->t_d);
+    printf(ANSI_YELLOW "TIME_GRANULARITY %d\ndt: %g (t_d: %g)\n" ANSI_RESET, TIME_GRANULARITY, dt, P->t_d);
 #endif
 
-    /* Reading coefficients for T(x, y, 0) and E(x, y, 0) */
-    // TODO: any reason not to update E in-place
+    /* Reading coefficients for T and E at t=0 */
     FILE *coefficients = fopen("coefficients.txt", "r");
     if (coefficients == NULL) {
         fprintf(stderr, "Can't open coefficients file\n");
@@ -158,10 +143,10 @@ int main(int argc, const char* argv[]) {
         int i = s % P->I,
             j = s / P->I;
         setv(&A, s, s, 1 / pow(dx, 2) + 1 / pow(dy, 2) + 1 / dt);
-        incv(&A, s, s - P->I + 2 * P->I * (j == 0), 1 / pow(dy, 2));
-        incv(&A, s, s + P->I - 2 * P->I * (j == P->J - 1), 1 / pow(dy, 2));
-        incv(&A, s - 1 + 2 * (i == 0), s, 1 / pow(dx, 2));
-        incv(&A, s + 1 - 2 * (i == P->I - 1), s, 1 / pow(dx, 2));
+        incv(&A, s - P->I + 2 * P->I * (j == 0), s, 1 / (2 * pow(dy, 2)));
+        incv(&A, s + P->I - 2 * P->I * (j == P->J - 1), s, 1 / (2 * pow(dy, 2)));
+        incv(&A, s, s - 1 + 2 * (i == 0), 1 / (2 * pow(dx, 2)));
+        incv(&A, s, s + 1 - 2 * (i == P->I - 1), 1 / (2 * pow(dx, 2)));
     }
 
 #ifdef DEBUG
@@ -191,7 +176,7 @@ int main(int argc, const char* argv[]) {
         if (!(k % TIME_GRANULARITY)) {
             for (int i = 0; i < P->I; ++i) {
                 for (int j = 0; j < P->J; ++j) {
-                    fprintf(output, "%lg %lg %lg %lg %lg\n", t, dx * i, dy * j, T[CD(i, j)], E[CD(i, j)]);
+                    fprintf(output, "%lg %lg %lg %lg %lg\n", t, dx * i, dy * j, T_(i, j), E_(i, j));
                 }
             }
         }
@@ -364,7 +349,7 @@ void print_mat(double* mat, params* P) {
     for (int i = 0; i < P->J; ++i) {
         printf("%4d │ ", i);
         for (int j = 0; j < P->J; ++j) {
-            printf("%11.4g ", mat[CD(i, j)]);
+            printf("%11.4g ", mat[i + P->I * j]);
         }
         printf("│\n");
     }
@@ -378,11 +363,4 @@ void print_mat(double* mat, params* P) {
 /* Equality check using absolute and relative tolerance for floating-point numbers */
 int is_close(double a, double b) {
     return fabs(a - b) <= (FLOAT_CMP_ATOL + FLOAT_CMP_RTOL * fabs(b));
-}
-
-/* Efficient swap memory function */
-void swap_mem(double **a, double **b) {
-    double *temp = *b;
-    *b = *a;
-    *a = temp;
 }
