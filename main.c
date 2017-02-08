@@ -27,17 +27,12 @@
 #define FLOAT_CMP_RTOL 1e-05
 #define FLOAT_CMP_ATOL 1e-08
 #define DEBUG
-#define GHOST
 
 #define CD(i, j) ((i) + P->I * (j))
-#ifdef GHOST
-#define CDG(i, j) ((i) + 1 + (P->I + 2) * ((j) + 1))
-#define T_(i, j) T[CDG(i, j)]
-#else
-#define T_(i, j) T[CD(i, j)]
-#endif
-#define E_(i, j) E[CD(i, j)]
-#define d2Tds2_(i, j) d2Tds2[CD(i, j)]
+#define T_(i, j) T[CD((i), (j))]
+#define E_(i, j) E[CD((i), (j))]
+#define A_(i, j) A[CD((i), (j))]
+#define RHS_(i, j) RHS[CD((i), (j))]
 
 #define min(a, b) (((a) < (b)) ? (a) : (b))
 
@@ -82,15 +77,14 @@ double *getp(band_mat *bmat, int row, int column);
 /* Set value to a location in the band matrix, using the row and column indexes of the full matrix. */
 void setv(band_mat *bmat, int row, int column, double val);
 
+/* Increase value at a location in the band matrix, using the row and column indexes of the full matrix. */
+void incv(band_mat *bmat, int row, int column, double val);
+
 /* Solve the equation Ax = b for a matrix a stored in band format and x and b real arrays */
 int solve_Ax_eq_b(band_mat *bmat, double *x, double *b);
 
 /* Print band matrix */
 void print_bmat(band_mat *bmat);
-
-#ifdef GHOST
-void print_gmat(double *mat, params *P);
-#endif
 
 /* Print matrix */
 void print_mat(double* bmat, params* P);
@@ -149,33 +143,31 @@ int main(int argc, const char* argv[]) {
         fprintf(stderr, "Can't open coefficients file\n");
         return 1;
     }
-#ifdef GHOST
-    double *T = malloc((P->I + 2) * (P->J + 2) * sizeof(double)),
-           *E = malloc(P->S * sizeof(double)),
-           *d2Tds2 = malloc(P->S * sizeof(double));
-    for (int s = 0; s < (P->I + 2) * (P->J + 2); ++s) {
-        T[s] = NAN;
-    }
-    for (int i = 0; i < P->I; ++i) {
-        for (int j = 0; j < P->J; ++j) {
-            fscanf(coefficients, "%lg %lg", &T_(i, j), &E_(i, j));
-        }
-        T_(i, -1) = T_(i, 1);
-        T_(i, P->J) = T_(i, P->J - 2);
-    }
-    for (int j = 0; j < P->J; ++j) {
-        T_(-1, j) = T_(1, j);
-        T_(P->I, j) = T_(P->I - 2, j);
-    }
-#else
     double *T = malloc(P->S * sizeof(double)),
            *E = malloc(P->S * sizeof(double)),
-           *d2Tds2 = malloc(P->S * sizeof(double));
+           *RHS = malloc(P->S * sizeof(double));
     for (int s = 0; s < P->S; ++s) {
         fscanf(coefficients, "%lg %lg", &T[s], &E[s]);
     }
-#endif
     fclose(coefficients);
+
+    /* Create A */
+    band_mat A;
+    init_band_mat(&A, P->I, P->I, P->S);
+    for (int s = 0; s < P->S; ++s) {
+        int i = s % P->I,
+            j = s / P->I;
+        setv(&A, s, s, 1 / pow(dx, 2) + 1 / pow(dy, 2) + 1 / dt);
+        incv(&A, s, s - P->I + 2 * P->I * (j == 0), 1 / pow(dy, 2));
+        incv(&A, s, s + P->I - 2 * P->I * (j == P->J - 1), 1 / pow(dy, 2));
+        incv(&A, s - 1 + 2 * (i == 0), s, 1 / pow(dx, 2));
+        incv(&A, s + 1 - 2 * (i == P->I - 1), s, 1 / pow(dx, 2));
+    }
+
+#ifdef DEBUG
+    printf(ANSI_GREEN "Coefficient matrix A:" ANSI_RESET "\n");
+    print_bmat(&A);
+#endif
 
     /* Output file for data */
     FILE *output = fopen("output.txt", "w");
@@ -190,11 +182,7 @@ int main(int argc, const char* argv[]) {
             printf(ANSI_L_CYAN " Logging output\n" ANSI_RESET);
         }
         printf(ANSI_GREEN " T:" ANSI_RESET "\n");
-#ifdef GHOST
-        print_gmat(T, P);
-#else
         print_mat(T, P);
-#endif
         printf(ANSI_GREEN " E:" ANSI_RESET "\n");
         print_mat(E, P);
 #endif
@@ -208,82 +196,37 @@ int main(int argc, const char* argv[]) {
             }
         }
 
-        // TODO: boundary & corners?
-#ifdef GHOST
-        /* Update T ghost points */
-        for (int i = 0; i < P->I; ++i) {
-            T_(i, -1) = T_(i, 1);
-            T_(i, P->J) = T_(i, P->J - 2);
-        }
-        for (int j = 0; j < P->J; ++j) {
-            T_(-1, j) = T_(1, j);
-            T_(P->I, j) = T_(P->I - 2, j);
-        }
-        /* Update d2Tds2 */
+        /* Update E and T */
         for (int i = 0; i < P->I; ++i) {
             for (int j = 0; j < P->J; ++j) {
-                d2Tds2_(i, j) = (T_(i + 1, j) + T_(i - 1, j) - 2 * T_(i, j)) / pow(dx, 2) +
-                                (T_(i, j + 1) + T_(i, j - 1) - 2 * T_(i, j)) / pow(dy, 2);
-            }
-        }
-#else
-        for (int i = 0; i < P->I; ++i) {
-            for (int j = 0; j < P->J; ++j) {
-                int j_l = j - 1 + 2 * !j,
+                int j_l = j - 1 + 2 * (j == 0),
                     j_h = j + 1 - 2 * (j == P->J - 1),
-                    i_l = i - 1 + 2 * !i,
+                    i_l = i - 1 + 2 * (i == 0),
                     i_r = i + 1 - 2 * (i == P->I - 1);
-                d2Tds2_(i, j) = (T_(i_r, j) + T_(i_l, j) - 2 * T_(i, j)) / pow(dx, 2) +
-                                (T_(i, j_h) + T_(i, j_l) - 2 * T_(i, j)) / pow(dy, 2);
+                double tanch = 1.0 + tanh((T_(i, j) - P->T_C) / P->T_w),
+                        dEdt = -E_(i, j) * (P->gamma_B / 2.0) * tanch;
+                E_(i, j) += dEdt * dt;
+                RHS_(i, j) = (T_(i_r, j) + T_(i_l, j) - T_(i, j)) / pow(dx, 2) +
+                             (T_(i, j_h) + T_(i, j_l) - T_(i, j)) / pow(dy, 2) - T_(i, j) / dt - dEdt;
             }
         }
-#endif
 
 #ifdef DEBUG
-#ifdef GHOST
-        printf(ANSI_MAGENTA " Interim T:" ANSI_RESET "\n");
-        print_gmat(T, P);
-#endif
-        printf(ANSI_MAGENTA " d2Tds2:" ANSI_RESET "\n");
-        print_mat(d2Tds2, P);
+        printf(ANSI_MAGENTA " RHS:" ANSI_RESET "\n");
+        print_mat(RHS, P);
 #endif
 
-        /* Update T and E */
-#ifdef GHOST
-        for (int i = 0; i < P->I; ++i) {
-            for (int j = 0; j < P->J; ++j) {
-                double tanch = 1.0 + tanh((T_(i, j) - P->T_C) / P->T_w),
-                       dEdt = -E_(i, j) * (P->gamma_B / 2.0) * tanch,
-                       dTdt = d2Tds2_(i, j) - dEdt,
-                       dE = -E_(i, j) * (P->gamma_B / 2.0) * tanch * dt,
-                       //dE_Mo = 1.0 + (P->gamma_B / 2.0) * tanch * dt,
-                       dT = dTdt * dt;
-                E_(i, j) += dE;
-                //E_(i, j) /= dE_Mo;
-                T_(i, j) += dT;
-            }
-        }
-#else
-        for (int s = 0; s < P->S; ++s) {
-            double tanch = 1.0 + tanh((T[s] - P->T_C) / P->T_w),
-                    dEdt = -E[s] * (P->gamma_B / 2.0) * tanch,
-                    dTdt = d2Tds2[s] - dEdt,
-                    dE = -E[s] * (P->gamma_B / 2.0) * tanch * dt,
-            //dE_Mo = 1.0 + (P->gamma_B / 2.0) * tanch * dt,
-                    dT = dTdt * dt;
-            E[s] += dE;
-            //E[s] /= dE_Mo;
-            T[s] += dT;
-        }
-#endif
+        /* Solve T for t+1 */
+        solve_Ax_eq_b(&A, T, RHS);
     }
 
     /* Cleanup */
     fclose(output);
     fclose(error);
+    finalise_band_mat(&A);
     free(T);
     free(E);
-    free(d2Tds2);
+    free(RHS);
 
     return 0;
 }
@@ -330,10 +273,23 @@ void setv(band_mat *bmat, int row, int column, double val) {
     double *valr = getp(bmat, row, column);
     int bandno = bmat->nbands_up + row - column;
     if (bandno < 0 || bandno >= bmat->nbrows) {
-        printf(ANSI_YELLOW "Setting (%d, %d) out of band:\n band %d\n" ANSI_RESET,
+        printf(ANSI_RED "Setting (%d, %d) out of band:\n band %d\n" ANSI_RESET,
                row, column, bandno);
+        exit(1);
     }
     *valr = val;
+}
+
+/* Increase value at a location in the band matrix, using the row and column indexes of the full matrix. */
+void incv(band_mat *bmat, int row, int column, double val) {
+    double *valr = getp(bmat, row, column);
+    int bandno = bmat->nbands_up + row - column;
+    if (bandno < 0 || bandno >= bmat->nbrows) {
+        printf(ANSI_RED "Increasing (%d, %d) out of band:\n band %d\n" ANSI_RESET,
+               row, column, bandno);
+        exit(1);
+    }
+    *valr += val;
 }
 
 /* Solve the equation Ax = b for a matrix a stored in band format and x and b real arrays */
@@ -373,7 +329,7 @@ void print_bmat(band_mat *bmat) {
         for (int j = 0; j < bmat->ncol; ++j) {
             int bandno = bmat->nbands_up + i - j;
             if (bandno < 0 || bandno >= bmat->nbrows) {
-                printf(ANSI_RED "%11.4g " ANSI_RESET, *getp(bmat, i, j));
+                printf(ANSI_RED "%11.4g " ANSI_RESET, 0.0);
             } else if (i == j) {
                 printf(ANSI_BOLD "%11.4g " ANSI_RESET, *getp(bmat, i, j));
             } else {
@@ -388,44 +344,6 @@ void print_bmat(band_mat *bmat) {
     }
     printf("─┘\n");
 }
-
-#ifdef GHOST
-/* Print matrix with ghost points */
-void print_gmat(double *mat, params *P) {
-
-    /* Column header */
-    printf("       ");
-    for (int i = -1; i < P->I + 1; ++i) {
-        printf("%11d ", i);
-    }
-    printf("\n");
-    printf("     ┌");
-    for (int i = -1; i < P->I + 1; ++i) {
-        printf("────────────");
-    }
-    printf("─┐\n");
-
-    /* Rows */
-    for (int i = -1; i < P->I + 1; ++i) {
-        printf("%4d │ ", i);
-        for (int j = -1; j < P->J + 1; ++j) {
-            if (i < 0 || j < 0 || i == P->I || j == P->J) {
-                printf(ANSI_RED);
-            }
-            printf("%11.4g ", mat[CDG(i, j)]);
-            if (i < 0 || j < 0 || i == P->I || j == P->J) {
-                printf(ANSI_RESET);
-            }
-        }
-        printf("│\n");
-    }
-    printf("     └");
-    for (int i = -1; i < P->I + 1; ++i) {
-        printf("────────────");
-    }
-    printf("─┘\n");
-}
-#endif
 
 /* Print matrix */
 void print_mat(double* mat, params* P) {
