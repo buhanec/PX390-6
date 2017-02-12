@@ -166,7 +166,7 @@ int main(int argc, const char* argv[]) {
                 D = *getp(&A, s + P.I, s);
             double sum = Q + B + C + D;
             if (!is_close(sum, expected)) {
-                printf(ANSI_RED "ERROR IN A AT (%d, %d)\n" ANSI_RESET, i, j);
+                printf(ANSI_RED "Error in A at (%d, %d): %g != %g\n" ANSI_RESET, i, j, sum, expected);
             }
         }
     }
