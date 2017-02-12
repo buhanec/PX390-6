@@ -16,9 +16,9 @@
 #define FLOAT_CMP_ATOL 1e-08
 #define LOG
 
-#define T_(i, j) T[(i) + P->I * (j)]
-#define E_(i, j) E[(i) + P->I * (j)]
-#define RHS_(i, j) RHS[(i) + P->I * (j)]
+#define T_(i, j) T[(i) + P.I * (j)]
+#define E_(i, j) E[(i) + P.I * (j)]
+#define RHS_(i, j) RHS[(i) + P.I * (j)]
 
 #define min(a, b) (((a) < (b)) ? (a) : (b))
 
@@ -73,15 +73,15 @@ int solve_Ax_eq_b(band_mat *bmat, double *x, double *b);
 void print_bmat(band_mat *bmat);
 
 /* Print matrix */
-void print_mat(double* bmat, params* P);
+void print_mat(double* bmat, params P);
 
 /* Equality check using absolute and relative tolerance for floating-point numbers */
 int is_close(double a, double b);
 
 int main(int argc, const char* argv[]) {
     /* Parameters */
-    params _;
-    params *P = &_;
+    // params _;
+    params P;
 
     /* Read inputs */
     FILE *input = fopen("input.txt", "r");
@@ -90,36 +90,36 @@ int main(int argc, const char* argv[]) {
         return 1;
     }
     fscanf(input, "%lg\n%lg\n%d\n%d\n%lg\n%lg\n%lg\n%lg\n%lg\n",
-           &P->t_f, &P->t_d, &P->I, &P->J, &P->x_R, &P->y_H, &P->gamma_B, &P->T_C, &P->T_w);
+           &P.t_f, &P.t_d, &P.I, &P.J, &P.x_R, &P.y_H, &P.gamma_B, &P.T_C, &P.T_w);
     fclose(input);
 
     /* Set remaining parameters */
     // TODO: stability
     // TODO: floor vs round + remainder is_close
-    P->S = P->I * P->J;
+    P.S = P.I * P.J;
     /* deltas */
-    double dx = P->x_R / (P->I - 1);
-    double dy = P->y_H / (P->J - 1);
+    double dx = P.x_R / (P.I - 1);
+    double dy = P.y_H / (P.J - 1);
 #ifdef LOG
     printf(ANSI_YELLOW "dx: %g\ndy: %g\n" ANSI_RESET, dx, dy);
 #endif
     double magical_factor = 666.0;
-    if (is_close(round(P->t_f / P->t_d), P->t_f / P->t_d)) {
-        P->K = (int) round(P->t_f / P->t_d);
+    if (is_close(round(P.t_f / P.t_d), P.t_f / P.t_d)) {
+        P.K = (int) round(P.t_f / P.t_d);
 #ifdef LOG
-        printf(ANSI_YELLOW "Rounding to %d steps (%g/%g)\n" ANSI_RESET, P->K, P->t_f, P->t_d);
+        printf(ANSI_YELLOW "Rounding to %d steps (%g/%g)\n" ANSI_RESET, P.K, P.t_f, P.t_d);
 #endif
     } else {
-        P->K = (int) floor(P->t_f / P->t_d);
+        P.K = (int) floor(P.t_f / P.t_d);
 #ifdef LOG
-        printf(ANSI_YELLOW "Flooring to %d steps (%g/%g)\n" ANSI_RESET, P->K, P->t_f, P->t_d);
+        printf(ANSI_YELLOW "Flooring to %d steps (%g/%g)\n" ANSI_RESET, P.K, P.t_f, P.t_d);
 #endif
     }
-    int TIME_GRANULARITY = (int) ceil(magical_factor * 2 * P->t_f / (P->K * min(pow(dx, 2), pow(dy, 2))));
-    P->K *= TIME_GRANULARITY;
-    double dt = P->t_f / P->K;
+    int TIME_GRANULARITY = (int) ceil(magical_factor * 2 * P.t_f / (P.K * min(pow(dx, 2), pow(dy, 2))));
+    P.K *= TIME_GRANULARITY;
+    double dt = P.t_f / P.K;
 #ifdef LOG
-    printf(ANSI_YELLOW "TIME_GRANULARITY %d\ndt: %g (t_d: %g)\n" ANSI_RESET, TIME_GRANULARITY, dt, P->t_d);
+    printf(ANSI_YELLOW "TIME_GRANULARITY %d\ndt: %g (t_d: %g)\n" ANSI_RESET, TIME_GRANULARITY, dt, P.t_d);
 #endif
 
     /* Reading coefficients for T and E at t=0 */
@@ -128,25 +128,25 @@ int main(int argc, const char* argv[]) {
         fprintf(stderr, "Can't open coefficients file\n");
         return 1;
     }
-    double *T = malloc(P->S * sizeof(double)),
-           *E = malloc(P->S * sizeof(double)),
-           *RHS = malloc(P->S * sizeof(double));
-    for (int s = 0; s < P->S; ++s) {
+    double *T = malloc(P.S * sizeof(double)),
+           *E = malloc(P.S * sizeof(double)),
+           *RHS = malloc(P.S * sizeof(double));
+    for (int s = 0; s < P.S; ++s) {
         fscanf(coefficients, "%lg %lg", &T[s], &E[s]);
     }
     fclose(coefficients);
 
     /* Create A */
     band_mat A;
-    init_band_mat(&A, P->I, P->I, P->S);
-    for (int s = 0; s < P->S; ++s) {
-        int i = s % P->I,
-            j = s / P->I;
+    init_band_mat(&A, P.I, P.I, P.S);
+    for (int s = 0; s < P.S; ++s) {
+        int i = s % P.I,
+            j = s / P.I;
         setv(&A, s, s, 1 / pow(dx, 2) + 1 / pow(dy, 2) + 1 / dt);
-        decv(&A, s - P->I + 2 * P->I * (j == 0), s, 1 / (2 * pow(dy, 2)));
-        decv(&A, s + P->I - 2 * P->I * (j == P->J - 1), s, 1 / (2 * pow(dy, 2)));
+        decv(&A, s - P.I + 2 * P.I * (j == 0), s, 1 / (2 * pow(dy, 2)));
+        decv(&A, s + P.I - 2 * P.I * (j == P.J - 1), s, 1 / (2 * pow(dy, 2)));
         decv(&A, s, s - 1 + 2 * (i == 0), 1 / (2 * pow(dx, 2)));
-        decv(&A, s, s + 1 - 2 * (i == P->I - 1), 1 / (2 * pow(dx, 2)));
+        decv(&A, s, s + 1 - 2 * (i == P.I - 1), 1 / (2 * pow(dx, 2)));
     }
 
 #ifdef LOG
@@ -162,11 +162,11 @@ int main(int argc, const char* argv[]) {
     FILE *output = fopen("output.txt", "w");
     FILE *error = fopen("errorest.txt", "w");
 
-    for (int k = 0; k < P->K + 1; ++k) {
+    for (int k = 0; k < P.K + 1; ++k) {
         double t = dt * k;
 
 #ifdef DEBUG
-        printf(ANSI_YELLOW "Time: %.2g (%d/%d)\n" ANSI_RESET, t, k, P->K);
+        printf(ANSI_YELLOW "Time: %.2g (%d/%d)\n" ANSI_RESET, t, k, P.K);
         if (!(k % TIME_GRANULARITY)) {
             printf(ANSI_L_CYAN " Logging output\n" ANSI_RESET);
         }
@@ -178,22 +178,22 @@ int main(int argc, const char* argv[]) {
 
         /* Log stuff */
         if (!(k % TIME_GRANULARITY)) {
-            for (int i = 0; i < P->I; ++i) {
-                for (int j = 0; j < P->J; ++j) {
+            for (int i = 0; i < P.I; ++i) {
+                for (int j = 0; j < P.J; ++j) {
                     fprintf(output, "%lg %lg %lg %lg %lg\n", t, dx * i, dy * j, T_(i, j), E_(i, j));
                 }
             }
         }
 
         /* Update E and T */
-        for (int i = 0; i < P->I; ++i) {
-            for (int j = 0; j < P->J; ++j) {
+        for (int i = 0; i < P.I; ++i) {
+            for (int j = 0; j < P.J; ++j) {
                 int j_l = j - 1 + 2 * (j == 0),
-                    j_h = j + 1 - 2 * (j == P->J - 1),
+                    j_h = j + 1 - 2 * (j == P.J - 1),
                     i_l = i - 1 + 2 * (i == 0),
-                    i_r = i + 1 - 2 * (i == P->I - 1);
-                double tanch = 1.0 + tanh((T_(i, j) - P->T_C) / P->T_w),
-                       dEdt = -E_(i, j) * (P->gamma_B / 2.0) * tanch;
+                    i_r = i + 1 - 2 * (i == P.I - 1);
+                double tanch = 1.0 + tanh((T_(i, j) - P.T_C) / P.T_w),
+                       dEdt = -E_(i, j) * (P.gamma_B / 2.0) * tanch;
                 E_(i, j) += dEdt * dt;
                 RHS_(i, j) = (T_(i_r, j) / 2 + T_(i_l, j) / 2 - T_(i, j)) / pow(dx, 2) +
                              (T_(i, j_h) / 2 + T_(i, j_l) / 2 - T_(i, j)) / pow(dy, 2) + T_(i, j) / dt - dEdt;
@@ -342,30 +342,30 @@ void print_bmat(band_mat *bmat) {
 }
 
 /* Print matrix */
-void print_mat(double* mat, params* P) {
+void print_mat(double* mat, params P) {
 
     /* Column header */
     printf("       ");
-    for (int i = 0; i < P->I; ++i) {
+    for (int i = 0; i < P.I; ++i) {
         printf("%11d ", i);
     }
     printf("\n");
     printf("     ┌");
-    for (int i = 0; i < P->I; ++i) {
+    for (int i = 0; i < P.I; ++i) {
         printf("────────────");
     }
     printf("─┐\n");
 
     /* Rows */
-    for (int i = 0; i < P->J; ++i) {
+    for (int i = 0; i < P.J; ++i) {
         printf("%4d │ ", i);
-        for (int j = 0; j < P->J; ++j) {
-            printf("%11.4g ", mat[i + P->I * j]);
+        for (int j = 0; j < P.J; ++j) {
+            printf("%11.4g ", mat[i + P.I * j]);
         }
         printf("│\n");
     }
     printf("     └");
-    for (int i = 0; i < P->J; ++i) {
+    for (int i = 0; i < P.J; ++i) {
         printf("────────────");
     }
     printf("─┘\n");
