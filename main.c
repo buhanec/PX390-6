@@ -244,7 +244,7 @@ int main(int argc, const char* argv[]) {
 
 /* Main udpdate code */
 void update(band_mat *A, double *E, double *T, double *B, params P) {
-    /* Update E and calculate B in A*T=B */
+    /* Update E and calculate B for A*T=B */
     for (int i = 0; i < P.I; ++i) {
         for (int j = 0; j < P.J; ++j) {
             int j_l = j - 1 + 2 * (j == 0),
