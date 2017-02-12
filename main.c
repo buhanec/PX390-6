@@ -212,7 +212,7 @@ int main(int argc, const char* argv[]) {
             }
         }
 
-        /* Update E and T */
+        /* Update E and calculate RHS in A*T=RHS */
         for (int i = 0; i < P.I; ++i) {
             for (int j = 0; j < P.J; ++j) {
                 int j_l = j - 1 + 2 * (j == 0),
@@ -231,7 +231,7 @@ int main(int argc, const char* argv[]) {
         print_mat(RHS, P);
 #endif
 
-        /* Solve T for t+1 */
+        /* Update T by solving A*T=RHS */
         solve_Ax_eq_b(&A, T, RHS);
     }
 
