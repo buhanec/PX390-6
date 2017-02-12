@@ -20,7 +20,7 @@
 #define E_(i, j) E[(i) + P.I * (j)]
 #define RHS_(i, j) RHS[(i) + P.I * (j)]
 
-#define min(a, b) (((a) < (b)) ? (a) : (b))
+#define TIME_GRANULARITY 1000
 
 #undef I
 
@@ -94,16 +94,8 @@ int main(int argc, const char* argv[]) {
     fclose(input);
 
     /* Set remaining parameters */
-    // TODO: stability
     // TODO: floor vs round + remainder is_close
     P.S = P.I * P.J;
-    /* deltas */
-    double dx = P.x_R / (P.I - 1);
-    double dy = P.y_H / (P.J - 1);
-#ifdef LOG
-    printf(ANSI_YELLOW "dx: %g\ndy: %g\n" ANSI_RESET, dx, dy);
-#endif
-    double magical_factor = 666.0;
     if (is_close(round(P.t_f / P.t_d), P.t_f / P.t_d)) {
         P.K = (int) round(P.t_f / P.t_d);
 #ifdef LOG
@@ -115,11 +107,17 @@ int main(int argc, const char* argv[]) {
         printf(ANSI_YELLOW "Flooring to %d steps (%g/%g)\n" ANSI_RESET, P.K, P.t_f, P.t_d);
 #endif
     }
-    int TIME_GRANULARITY = (int) ceil(magical_factor * 2 * P.t_f / (P.K * min(pow(dx, 2), pow(dy, 2))));
     P.K *= TIME_GRANULARITY;
+#ifdef LOG
+    printf(ANSI_YELLOW "TIME_GRANULARITY = %d => %d steps\n" ANSI_RESET, TIME_GRANULARITY, P.K);
+#endif
+
+    /* deltas */
+    double dx = P.x_R / (P.I - 1);
+    double dy = P.y_H / (P.J - 1);
     double dt = P.t_f / P.K;
 #ifdef LOG
-    printf(ANSI_YELLOW "TIME_GRANULARITY %d\ndt: %g (t_d: %g)\n" ANSI_RESET, TIME_GRANULARITY, dt, P.t_d);
+    printf(ANSI_YELLOW "dx: %g\ndy: %g\ndt: %g\n" ANSI_RESET, dx, dy, dt);
 #endif
 
     /* Reading coefficients for T and E at t=0 */
