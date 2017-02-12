@@ -147,6 +147,31 @@ int main(int argc, const char* argv[]) {
         decv(&A, s, s + 1 - 2 * (i == P.I - 1), 1 / (2 * pow(dx, 2)));
     }
 
+#ifdef DEBUG
+    for (int i = 0; i < P.I; ++i) {
+        for (int j = 0; j < P.J; ++j) {
+            int s = i + P.I * j;
+            double Q = 0,
+                   B = 0,
+                   C = 0,
+                   D = 0;
+            double expected = -1 / pow(dy, 2) - 1 / pow(dx, 2);
+            if (i > 0)
+                Q = *getp(&A, s, s - 1);
+            if (i < P.I - 1)
+                B = *getp(&A, s, s + 1);
+            if (j > 0)
+                C = *getp(&A, s - P.I, s);
+            if (j < P.J - 1)
+                D = *getp(&A, s + P.I, s);
+            double sum = Q + B + C + D;
+            if (!is_close(sum, expected)) {
+                printf(ANSI_RED "ERROR IN A AT (%d, %d)\n" ANSI_RESET, i, j);
+            }
+        }
+    }
+#endif
+
 #ifdef LOG
     printf(ANSI_GREEN "Coefficient matrix A:" ANSI_RESET "\n");
     print_bmat(&A);
