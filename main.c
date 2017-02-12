@@ -15,12 +15,13 @@
 #define FLOAT_CMP_RTOL 1e-05
 #define FLOAT_CMP_ATOL 1e-08
 #define LOG
+#define DEBUG
 
 #define T_(i, j) T[(i) + P.I * (j)]
 #define E_(i, j) E[(i) + P.I * (j)]
 #define RHS_(i, j) RHS[(i) + P.I * (j)]
 
-#define TIME_GRANULARITY 1000
+#define TIME_GRANULARITY 5
 
 #undef I
 
@@ -94,7 +95,6 @@ int main(int argc, const char* argv[]) {
     fclose(input);
 
     /* Set remaining parameters */
-    // TODO: floor vs round + remainder is_close
     P.S = P.I * P.J;
     if (is_close(round(P.t_f / P.t_d), P.t_f / P.t_d)) {
         P.K = (int) round(P.t_f / P.t_d);
@@ -190,8 +190,7 @@ int main(int argc, const char* argv[]) {
                     j_h = j + 1 - 2 * (j == P.J - 1),
                     i_l = i - 1 + 2 * (i == 0),
                     i_r = i + 1 - 2 * (i == P.I - 1);
-                double tanch = 1.0 + tanh((T_(i, j) - P.T_C) / P.T_w),
-                       dEdt = -E_(i, j) * (P.gamma_B / 2.0) * tanch;
+                double dEdt = -E_(i, j) * (P.gamma_B / 2.0) * (1.0 + tanh((T_(i, j) - P.T_C) / P.T_w));
                 E_(i, j) += dEdt * dt;
                 RHS_(i, j) = (T_(i_r, j) / 2 + T_(i_l, j) / 2 - T_(i, j)) / pow(dx, 2) +
                              (T_(i, j_h) / 2 + T_(i, j_l) / 2 - T_(i, j)) / pow(dy, 2) + T_(i, j) / dt - dEdt;
