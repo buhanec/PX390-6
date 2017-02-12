@@ -141,8 +141,8 @@ int main(int argc, const char* argv[]) {
         int i = s % P.I,
             j = s / P.I;
         setv(&A, s, s, 1 / pow(dx, 2) + 1 / pow(dy, 2) + 1 / dt);
-        decv(&A, s - P.I + 2 * P.I * (j == 0), s, 1 / (2 * pow(dy, 2)));
-        decv(&A, s + P.I - 2 * P.I * (j == P.J - 1), s, 1 / (2 * pow(dy, 2)));
+        decv(&A, s, s - P.I + 2 * P.I * (j == 0), 1 / (2 * pow(dy, 2)));
+        decv(&A, s, s + P.I - 2 * P.I * (j == P.J - 1), 1 / (2 * pow(dy, 2)));
         decv(&A, s, s - 1 + 2 * (i == 0), 1 / (2 * pow(dx, 2)));
         decv(&A, s, s + 1 - 2 * (i == P.I - 1), 1 / (2 * pow(dx, 2)));
     }
