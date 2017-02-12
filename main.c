@@ -156,14 +156,18 @@ int main(int argc, const char* argv[]) {
                    C = 0,
                    D = 0;
             double expected = -1 / pow(dy, 2) - 1 / pow(dx, 2);
-            if (i > 0)
+            if (i > 0) {
                 Q = *getp(&A, s, s - 1);
-            if (i < P.I - 1)
+            }
+            if (i < P.I - 1) {
                 B = *getp(&A, s, s + 1);
-            if (j > 0)
-                C = *getp(&A, s - P.I, s);
-            if (j < P.J - 1)
-                D = *getp(&A, s + P.I, s);
+            }
+            if (j > 0) {
+                C = *getp(&A, s, s - P.I);
+            }
+            if (j < P.J - 1) {
+                D = *getp(&A, s, s + P.I);
+            }
             double sum = Q + B + C + D;
             if (!is_close(sum, expected)) {
                 printf(ANSI_RED "Error in A at (%d, %d): %g != %g\n" ANSI_RESET, i, j, sum, expected);
