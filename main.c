@@ -19,7 +19,7 @@
 
 #define T_(i, j) T[(i) + P.I * (j)]
 #define E_(i, j) E[(i) + P.I * (j)]
-#define RHS_(i, j) RHS[(i) + P.I * (j)]
+#define B_(i, j) B[(i) + P.I * (j)]
 
 #define TIME_GRANULARITY 5
 
@@ -80,7 +80,7 @@ void print_mat(double* bmat, params P);
 /* Equality check using absolute and relative tolerance for floating-point numbers */
 int is_close(double a, double b);
 
-void update(band_mat *A, double *E, double *T, double *RHS, params P);
+void update(band_mat *A, double *E, double *T, double *B, params P);
 
 int main(int argc, const char* argv[]) {
     /* Parameters */
@@ -131,7 +131,7 @@ int main(int argc, const char* argv[]) {
     }
     double *T = malloc(P.S * sizeof(double)),
            *E = malloc(P.S * sizeof(double)),
-           *RHS = malloc(P.S * sizeof(double));
+           *B = malloc(P.S * sizeof(double));
     for (int s = 0; s < P.S; ++s) {
         fscanf(coefficients, "%lg %lg", &T[s], &E[s]);
     }
@@ -154,24 +154,24 @@ int main(int argc, const char* argv[]) {
     for (int i = 0; i < P.I; ++i) {
         for (int j = 0; j < P.J; ++j) {
             int s = i + P.I * j;
-            double Q = 0,
-                   B = 0,
-                   C = 0,
-                   D = 0;
+            double left = 0,
+                   right = 0,
+                   down = 0,
+                   up = 0;
             double expected = -1 / pow(P.dy, 2) - 1 / pow(P.dx, 2);
             if (i > 0) {
-                Q = *getp(&A, s, s - 1);
+                left = *getp(&A, s, s - 1);
             }
             if (i < P.I - 1) {
-                B = *getp(&A, s, s + 1);
+                right = *getp(&A, s, s + 1);
             }
             if (j > 0) {
-                C = *getp(&A, s, s - P.I);
+                down = *getp(&A, s, s - P.I);
             }
             if (j < P.J - 1) {
-                D = *getp(&A, s, s + P.I);
+                up = *getp(&A, s, s + P.I);
             }
-            double sum = Q + B + C + D;
+            double sum = left + right + down + up;
             if (!is_close(sum, expected)) {
                 printf(ANSI_RED "Error in A at (%d, %d): %g != %g\n" ANSI_RESET, i, j, sum, expected);
             }
@@ -215,11 +215,11 @@ int main(int argc, const char* argv[]) {
             }
         }
 
-        update(&A, E, T, RHS, P);
+        update(&A, E, T, B, P);
 
 #ifdef DEBUG
-        printf(ANSI_MAGENTA " RHS:" ANSI_RESET "\n");
-        print_mat(RHS, P);
+        printf(ANSI_MAGENTA " B:" ANSI_RESET "\n");
+        print_mat(B, P);
 #endif
 
     }
@@ -237,14 +237,14 @@ int main(int argc, const char* argv[]) {
     finalise_band_mat(&A);
     free(T);
     free(E);
-    free(RHS);
+    free(B);
 
     return 0;
 }
 
 /* Main udpdate code */
-void update(band_mat *A, double *E, double *T, double *RHS, params P) {
-    /* Update E and calculate RHS in A*T=RHS */
+void update(band_mat *A, double *E, double *T, double *B, params P) {
+    /* Update E and calculate B in A*T=B */
     for (int i = 0; i < P.I; ++i) {
         for (int j = 0; j < P.J; ++j) {
             int j_l = j - 1 + 2 * (j == 0),
@@ -253,14 +253,14 @@ void update(band_mat *A, double *E, double *T, double *RHS, params P) {
                     i_r = i + 1 - 2 * (i == P.I - 1);
             double dEdt = -E_(i, j) * (P.gamma_B / 2.0) * (1.0 + tanh((T_(i, j) - P.T_C) / P.T_w));
             E_(i, j) += dEdt * P.dt;
-            RHS_(i, j) = (T_(i_r, j) / 2 + T_(i_l, j) / 2 - T_(i, j)) / pow(P.dx, 2) +
+            B_(i, j) = (T_(i_r, j) / 2 + T_(i_l, j) / 2 - T_(i, j)) / pow(P.dx, 2) +
                          (T_(i, j_h) / 2 + T_(i, j_l) / 2 - T_(i, j)) / pow(P.dy, 2) +
                          T_(i, j) / P.dt - dEdt;
         }
     }
 
-    /* Update T by solving A*T=RHS */
-    solve_Ax_eq_b(A, T, RHS);
+    /* Update T by solving A*T=B */
+    solve_Ax_eq_b(A, T, B);
 }
 
 /* Initialise a band matrix of a certain size, allocate memory, and set the parameters.  */
