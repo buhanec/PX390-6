@@ -27,7 +27,8 @@
 
 /* Parameters */
 struct params {
-    double t_f, t_d, x_R, y_H, gamma_B, T_C, T_w;
+    double t_f, t_d, x_R, y_H, gamma_B, T_C, T_w,
+           dx, dy, dt;
     /*
      * I: x steps
      * J: y steps
@@ -79,6 +80,8 @@ void print_mat(double* bmat, params P);
 /* Equality check using absolute and relative tolerance for floating-point numbers */
 int is_close(double a, double b);
 
+void update(band_mat *A, double *E, double *T, double *RHS, params P);
+
 int main(int argc, const char* argv[]) {
     /* Parameters */
     // params _;
@@ -113,11 +116,11 @@ int main(int argc, const char* argv[]) {
 #endif
 
     /* deltas */
-    double dx = P.x_R / (P.I - 1);
-    double dy = P.y_H / (P.J - 1);
-    double dt = P.t_f / P.K;
+    P.dx = P.x_R / (P.I - 1);
+    P.dy = P.y_H / (P.J - 1);
+    P.dt = P.t_f / P.K;
 #ifdef LOG
-    printf(ANSI_YELLOW "dx: %g\ndy: %g\ndt: %g\n" ANSI_RESET, dx, dy, dt);
+    printf(ANSI_YELLOW "dx: %g\ndy: %g\ndt: %g\n" ANSI_RESET, P.dx, P.dy, P.dt);
 #endif
 
     /* Reading coefficients for T and E at t=0 */
@@ -140,11 +143,11 @@ int main(int argc, const char* argv[]) {
     for (int s = 0; s < P.S; ++s) {
         int i = s % P.I,
             j = s / P.I;
-        setv(&A, s, s, 1 / pow(dx, 2) + 1 / pow(dy, 2) + 1 / dt);
-        decv(&A, s, s - P.I + 2 * P.I * (j == 0), 1 / (2 * pow(dy, 2)));
-        decv(&A, s, s + P.I - 2 * P.I * (j == P.J - 1), 1 / (2 * pow(dy, 2)));
-        decv(&A, s, s - 1 + 2 * (i == 0), 1 / (2 * pow(dx, 2)));
-        decv(&A, s, s + 1 - 2 * (i == P.I - 1), 1 / (2 * pow(dx, 2)));
+        setv(&A, s, s, 1 / pow(P.dx, 2) + 1 / pow(P.dy, 2) + 1 / P.dt);
+        decv(&A, s, s - P.I + 2 * P.I * (j == 0), 1 / (2 * pow(P.dy, 2)));
+        decv(&A, s, s + P.I - 2 * P.I * (j == P.J - 1), 1 / (2 * pow(P.dy, 2)));
+        decv(&A, s, s - 1 + 2 * (i == 0), 1 / (2 * pow(P.dx, 2)));
+        decv(&A, s, s + 1 - 2 * (i == P.I - 1), 1 / (2 * pow(P.dx, 2)));
     }
 
 #ifdef DEBUG
@@ -155,7 +158,7 @@ int main(int argc, const char* argv[]) {
                    B = 0,
                    C = 0,
                    D = 0;
-            double expected = -1 / pow(dy, 2) - 1 / pow(dx, 2);
+            double expected = -1 / pow(P.dy, 2) - 1 / pow(P.dx, 2);
             if (i > 0) {
                 Q = *getp(&A, s, s - 1);
             }
@@ -190,7 +193,7 @@ int main(int argc, const char* argv[]) {
     FILE *error = fopen("errorest.txt", "w");
 
     for (int k = 0; k < P.K + 1; ++k) {
-        double t = dt * k;
+        double t = P.dt * k;
 
 #ifdef DEBUG
         printf(ANSI_YELLOW "Time: %.2g (%d/%d)\n" ANSI_RESET, t, k, P.K);
@@ -207,32 +210,18 @@ int main(int argc, const char* argv[]) {
         if (!(k % TIME_GRANULARITY)) {
             for (int i = 0; i < P.I; ++i) {
                 for (int j = 0; j < P.J; ++j) {
-                    fprintf(output, "%lg %lg %lg %lg %lg\n", t, dx * i, dy * j, T_(i, j), E_(i, j));
+                    fprintf(output, "%lg %lg %lg %lg %lg\n", t, P.dx * i, P.dy * j, T_(i, j), E_(i, j));
                 }
             }
         }
 
-        /* Update E and calculate RHS in A*T=RHS */
-        for (int i = 0; i < P.I; ++i) {
-            for (int j = 0; j < P.J; ++j) {
-                int j_l = j - 1 + 2 * (j == 0),
-                    j_h = j + 1 - 2 * (j == P.J - 1),
-                    i_l = i - 1 + 2 * (i == 0),
-                    i_r = i + 1 - 2 * (i == P.I - 1);
-                double dEdt = -E_(i, j) * (P.gamma_B / 2.0) * (1.0 + tanh((T_(i, j) - P.T_C) / P.T_w));
-                E_(i, j) += dEdt * dt;
-                RHS_(i, j) = (T_(i_r, j) / 2 + T_(i_l, j) / 2 - T_(i, j)) / pow(dx, 2) +
-                             (T_(i, j_h) / 2 + T_(i, j_l) / 2 - T_(i, j)) / pow(dy, 2) + T_(i, j) / dt - dEdt;
-            }
-        }
+        update(&A, E, T, RHS, P);
 
 #ifdef DEBUG
         printf(ANSI_MAGENTA " RHS:" ANSI_RESET "\n");
         print_mat(RHS, P);
 #endif
 
-        /* Update T by solving A*T=RHS */
-        solve_Ax_eq_b(&A, T, RHS);
     }
 
 #ifdef LOG
@@ -251,6 +240,27 @@ int main(int argc, const char* argv[]) {
     free(RHS);
 
     return 0;
+}
+
+/* Main udpdate code */
+void update(band_mat *A, double *E, double *T, double *RHS, params P) {
+    /* Update E and calculate RHS in A*T=RHS */
+    for (int i = 0; i < P.I; ++i) {
+        for (int j = 0; j < P.J; ++j) {
+            int j_l = j - 1 + 2 * (j == 0),
+                    j_h = j + 1 - 2 * (j == P.J - 1),
+                    i_l = i - 1 + 2 * (i == 0),
+                    i_r = i + 1 - 2 * (i == P.I - 1);
+            double dEdt = -E_(i, j) * (P.gamma_B / 2.0) * (1.0 + tanh((T_(i, j) - P.T_C) / P.T_w));
+            E_(i, j) += dEdt * P.dt;
+            RHS_(i, j) = (T_(i_r, j) / 2 + T_(i_l, j) / 2 - T_(i, j)) / pow(P.dx, 2) +
+                         (T_(i, j_h) / 2 + T_(i, j_l) / 2 - T_(i, j)) / pow(P.dy, 2) +
+                         T_(i, j) / P.dt - dEdt;
+        }
+    }
+
+    /* Update T by solving A*T=RHS */
+    solve_Ax_eq_b(A, T, RHS);
 }
 
 /* Initialise a band matrix of a certain size, allocate memory, and set the parameters.  */
