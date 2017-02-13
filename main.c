@@ -14,7 +14,6 @@
 
 #define FLOAT_CMP_RTOL 1e-05
 #define FLOAT_CMP_ATOL 1e-08
-#define LANCZOS_A 3
 #define LOG
 
 #define T_(i, j) T[(i) + P.I * (j)]
@@ -27,8 +26,9 @@
 
 /* Parameters */
 struct params {
+    /* Parameters specified in specification */
     double t_f, t_d, x_R, y_H, gamma_B, T_C, T_w,
-           dx, dy, dt;
+            dx, dy, dt;
     /*
      * I: x steps
      * J: y steps
@@ -87,55 +87,11 @@ void print_mat(double* bmat, params P);
 /* Equality check using absolute and relative tolerance for floating-point numbers */
 int is_close(double a, double b);
 
-/* Lanczos kernel */
-double L(double x) {
-    if (x == 0) {
-        return 1.0;
-    } else if (x >= -LANCZOS_A && x <= LANCZOS_A) {
-        return LANCZOS_A * sin(M_PI * x) * sin(M_PI * x / LANCZOS_A) / (pow(M_PI, 2) * pow(x, 2));
-    } else {
-        return 0.0;
-    }
-}
-
-/* Lanczos resampling */
-void lanczosHalf(double *input, double *output, int I_new, int J_new) {
-    int I_old = 2 * I_new - 1,
-        J_old = 2 * I_new - 1;
-    for (int i = 0; i < I_new; ++i) {
-        for (int j = 0; j < J_new; ++j) {
-            double sum = 0;
-            for (int k = -LANCZOS_A; k < LANCZOS_A + 1; ++k) {
-                for (int l = -LANCZOS_A; l < LANCZOS_A + 1; ++l) {
-                    double kernel_element = L(k) * L(l);
-                    int i_input = 2 * i + k,
-                        j_input = 2 * j + l;
-                    if (i_input < 0) {
-                        i_input = 0;
-                    } else if (i_input > I_old - 1) {
-                        i_input = I_old - 1;
-                    }
-                    if (j_input < 0) {
-                        j_input = 0;
-                    } else if (j_input > J_old - 1) {
-                        j_input = J_old - 1;
-                    }
-                    int s_input = i_input + J_old * j_input;
-                    double dun = input[s_input] * kernel_element;
-                    if ((i == 1 || i == 2) && j == 2) {
-                        sum += 0;
-                    }
-                    sum += dun;
-                }
-            }
-            output[i + I_new * j] = sum;
-        }
-    }
-}
+/* Nearest neighbour resampling */
+void coarsen(double *input, double *output, int I_new, int J_new);
 
 int main(int argc, const char* argv[]) {
     /* Parameters */
-    // params _;
     params P;
 
     /* Read inputs */
@@ -150,6 +106,11 @@ int main(int argc, const char* argv[]) {
 
     /* Set remaining parameters */
     P.S = P.I * P.J;
+
+    /*
+     * Round total steps if t_f is nicely divisible by t_d otherwise floor
+     * to prevent unnecessary time cycles which would never get logged
+     */
     if (is_close(round(P.t_f / P.t_d), P.t_f / P.t_d)) {
         P.K = (int) round(P.t_f / P.t_d);
 #ifdef LOG
@@ -174,12 +135,18 @@ int main(int argc, const char* argv[]) {
     printf(ANSI_YELLOW "dx: %g\ndy: %g\ndt: %g\n" ANSI_RESET, P.dx, P.dy, P.dt);
 #endif
 
-    /* Reading coefficients for T and E at t=0 */
+    /* Reading coefficients for T and E at t = 0 */
     FILE *coefficients = fopen("coefficients.txt", "r");
     if (coefficients == NULL) {
         fprintf(stderr, "Can't open coefficients file\n");
         return 1;
     }
+
+    /*
+     * T and E contain current T and E, T_init and E_init preserve initial
+     * state for the second simulation on a coarsened grid.
+     * B represents an interim calculation used when solving A * T = B.
+     */
     double *T = malloc(P.S * sizeof(double)),
            *E = malloc(P.S * sizeof(double)),
            *T_init = malloc(P.S * sizeof(double)),
@@ -192,37 +159,10 @@ int main(int argc, const char* argv[]) {
     }
     fclose(coefficients);
 
-    /* Create A */
+    /* Create A used in A * T = B */
     band_mat A;
     init_band_mat(&A, P.I, P.I, P.S);
     init_A(&A, P);
-
-#ifdef DEBUG
-    for (int i = 0; i < P.I; ++i) {
-        for (int j = 0; j < P.J; ++j) {
-            int s = i + P.I * j;
-            double left = 0,
-                   right = 0,
-                   down = 0,
-                   up = 0;
-            double expected = -1 / pow(P.dy, 2) - 1 / pow(P.dx, 2);
-            if (i > 0) {
-                left = *getp(&A, s, s - 1);
-            } else if (i < P.I - 1) {
-                right = *getp(&A, s, s + 1);
-            }
-            if (j > 0) {
-                down = *getp(&A, s, s - P.I);
-            } else if (j < P.J - 1) {
-                up = *getp(&A, s, s + P.I);
-            }
-            double sum = left + right + down + up;
-            if (!is_close(sum, expected)) {
-                printf(ANSI_RED "Error in A at (%d, %d): %g != %g\n" ANSI_RESET, i, j, sum, expected);
-            }
-        }
-    }
-#endif
 
 #ifdef LOG
     printf(ANSI_GREEN "Coefficient matrix A:" ANSI_RESET "\n");
@@ -231,16 +171,13 @@ int main(int argc, const char* argv[]) {
     print_mat(T, P);
     printf(ANSI_GREEN "Initial E:\n" ANSI_RESET);
     print_mat(E, P);
-    printf(ANSI_GREEN "Initial T for resizing:\n" ANSI_RESET);
-    print_mat(T_init, P);
-    printf(ANSI_GREEN "Initial E for resizing:\n" ANSI_RESET);
-    print_mat(E_init, P);
 #endif
 
-    /* Output file for data */
+    /* Output files */
     FILE *output = fopen("output.txt", "w");
     FILE *error = fopen("errorest.txt", "w");
 
+    /* Perform simulation */
     for (int k = 0; k < P.K + 1; ++k) {
         double t = P.dt * k;
 
@@ -255,7 +192,7 @@ int main(int argc, const char* argv[]) {
         print_mat(E, P);
 #endif
 
-        /* Log stuff */
+        /* Log simulation state */
         if (!(k % TIME_GRANULARITY)) {
             for (int i = 0; i < P.I; ++i) {
                 for (int j = 0; j < P.J; ++j) {
@@ -264,6 +201,7 @@ int main(int argc, const char* argv[]) {
             }
         }
 
+        /* Update simulation state */
         update(&A, E, T, B, P);
 
 #ifdef DEBUG
@@ -279,25 +217,31 @@ int main(int argc, const char* argv[]) {
     print_mat(E, P);
 #endif
 
-    /* Prepare for coarse grid */
+    /* Update parameters for coarse grid */
     P.I = (P.I + 1) / 2;
     P.J = (P.J + 1) / 2;
     P.S = P.I * P.J;
     P.dx = P.x_R / (P.I - 1);
     P.dy = P.y_H / (P.J - 1);
 
-    /* Resize A */
+    /* Resize A for coarse grid */
     finalise_band_mat(&A);
     init_band_mat(&A, P.I, P.I, P.S);
     init_A(&A, P);
 
-    /* Resize initial grids using COOL AND SOPHISTICATED METHODS */
+    /*
+     * Resize initial grids using nearest neighbours.
+     * Tc and Ec contain current T and E, Bc is an interim calculation used
+     * to solve A * Tc = Bc.
+     * Cc is used to compare results with non-coarsened simulation.
+     */
     double *Tc = malloc(P.S * sizeof(double)),
            *Ec = malloc(P.S * sizeof(double)),
+           *Cc = malloc(P.S * sizeof(double)),
            *Bc = malloc(P.S * sizeof(double));
 
-    lanczosHalf(T_init, Tc, P.I, P.J);
-    lanczosHalf(E_init, Ec, P.I, P.J);
+    coarsen(T_init, Tc, P.I, P.J);
+    coarsen(E_init, Ec, P.I, P.J);
 
 #ifdef LOG
     printf(ANSI_GREEN "Coefficient matrix A (coarse):" ANSI_RESET "\n");
@@ -308,6 +252,7 @@ int main(int argc, const char* argv[]) {
     print_mat(Ec, P);
 #endif
 
+    /* Perform coarse simulation */
     for (int k = 0; k < P.K + 1; ++k) {
         update(&A, Ec, Tc, Bc, P);
     }
@@ -319,6 +264,20 @@ int main(int argc, const char* argv[]) {
     print_mat(Ec, P);
 #endif
 
+    /* Make comparisons */
+    coarsen(T, Cc, P.I, P.J);
+    double T_error = 0;
+    for(int s = 0; s < P.S; ++s) {
+        T_error += pow(Tc[s] - Cc[s], 2);
+    }
+    T_error /= P.S;
+    fprintf(error, "%g\n", T_error);
+
+#ifdef LOG
+    printf(ANSI_GREEN "Resized T:\n" ANSI_RESET);
+    print_mat(Cc, P);
+    printf(ANSI_YELLOW "Final error: " ANSI_RESET "%g\n", T_error);
+#endif
 
     /* Cleanup */
     fclose(output);
@@ -332,6 +291,7 @@ int main(int argc, const char* argv[]) {
     free(Ec);
     free(B);
     free(Bc);
+    free(Cc);
 
     return 0;
 }
@@ -348,8 +308,8 @@ void update(band_mat *A, double *E, double *T, double *B, params P) {
             double dEdt = -E_(i, j) * (P.gamma_B / 2.0) * (1.0 + tanh((T_(i, j) - P.T_C) / P.T_w));
             E_(i, j) += dEdt * P.dt;
             B_(i, j) = (T_(i_r, j) / 2 + T_(i_l, j) / 2 - T_(i, j)) / pow(P.dx, 2) +
-                         (T_(i, j_h) / 2 + T_(i, j_l) / 2 - T_(i, j)) / pow(P.dy, 2) +
-                         T_(i, j) / P.dt - dEdt;
+                       (T_(i, j_h) / 2 + T_(i, j_l) / 2 - T_(i, j)) / pow(P.dy, 2) +
+                       T_(i, j) / P.dt - dEdt;
         }
     }
 
@@ -517,4 +477,14 @@ void print_mat(double* mat, params P) {
 /* Equality check using absolute and relative tolerance for floating-point numbers */
 int is_close(double a, double b) {
     return fabs(a - b) <= (FLOAT_CMP_ATOL + FLOAT_CMP_RTOL * fabs(b));
+}
+
+/* Nearest neighbour resampling */
+void coarsen(double *input, double *output, int I_new, int J_new) {
+    int I_old = 2 * I_new - 1;
+    for (int i = 0; i < I_new; ++i) {
+        for (int j = 0; j < J_new; ++j) {
+            output[i + I_new * j] = input[2 * i + I_old * 2 * j];
+        }
+    }
 }
